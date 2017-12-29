@@ -11,7 +11,7 @@ int gpio_register_pin(enum gpio_pin pin) {
 	int fd;
 	int ret = 0;
 
-	fd = open("sys/class/gpio/export", O_WRONLY);
+	fd = open("/sys/class/gpio/export", O_WRONLY);
 	if (fd < 0) {
 		ret = -1;
 		goto done;
