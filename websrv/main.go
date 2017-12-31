@@ -65,7 +65,12 @@ var watchTmpl = template.Must(template.New("watch").Parse(`<!doctype html>
 func watchHandler(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 
-	if strings.Contains(r.UserAgent(), "Safari") {
+    log.Println(r.UserAgent())
+    
+    serveHls := strings.Contains(r.UserAgent(), "Safari") &&
+        !(strings.Contains(r.UserAgent(), "Chrome") || strings.Contains(r.UserAgent(), "Firefox"))
+    
+	if serveHls {
 		watchTmpl.Execute(&buf, "hls")
 	} else {
 		watchTmpl.Execute(&buf, "dash")
