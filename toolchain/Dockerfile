@@ -24,7 +24,7 @@ run wget http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-${CT_NG_VERS
     tar -xf crosstool-ng-${CT_NG_VERSION}.tar.xz && \
     cd crosstool-ng-${CT_NG_VERSION} && \
     ./configure --prefix=/usr && \
-    make && \
+    make -j$(nproc) && \
     make install
 
 # build our toolchain! (installs to /opt/gcc-rpi)
