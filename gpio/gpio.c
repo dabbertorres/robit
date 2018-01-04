@@ -51,43 +51,45 @@ done:
 	return ret;
 }
 
-int gpio_set_direction(enum gpio_pin pin, int direction) {
+int gpio_set_direction(enum gpio_pin pin, enum gpio_dir dir) {
+    // Largest possible value for the gpio direction path.
+	char path[35];
+    
 	int ret;
-	char path[35]; // Largest possible value for the gpio direction path.
 	int fd;
 
 	snprintf(path, 35, "/sys/class/gpio/gpio%d/direction", pin);
+    
 	fd = open(path, O_WRONLY);
-
 	if(fd < 0) {
 		return -1;
 	}
 	
-	if(direction == INPUT) {
+	if(dir == GPIO_IN) {
 		ret = write(fd, "in", 2);
-	} else if(direction == OUTPUT) {
-		ret = write(fd, "out", 3);
 	} else {
-		ret = -1;
+		ret = write(fd, "out", 3);
 	}
 
 	close(fd);
 	return ret;
 }
 
-int gpio_write(enum gpio_pin pin, int value) {
+int gpio_write(enum gpio_pin pin, enum gpio_value val) {
+    // Largest possible value for the gpio direction path.
+	char path[30];
+    
 	int ret;
-	char path[30]; // Largest possible value for the gpio direction path.
 	int fd;
 
 	snprintf(path, 30, "/sys/class/gpio/gpio%d/value", pin);
+    
 	fd = open(path, O_WRONLY);
-
 	if(fd < 0) {
 		return -1;
 	}
 	
-	if (value == OFF) {
+	if (val == GPIO_OFF) {
 		ret = write(fd, "0", 1);
 	} else {
 		ret = write(fd, "1", 1);
@@ -98,15 +100,16 @@ int gpio_write(enum gpio_pin pin, int value) {
 }
 
 int gpio_read(enum gpio_pin pin) {
+    // Largest possible value for the gpio direction path.
+	char path[30];
+    
 	int ret;
-	char path[30]; // Largest possible value for the gpio direction path.
 	char value_string[3];
 	int fd;
 
-
 	snprintf(path, 30, "/sys/class/gpio/gpio%d/value", pin);
-	fd = open(path, O_RDONLY);
-
+	
+    fd = open(path, O_RDONLY);
 	if(fd < 0) {
 		return -1;
 	}
