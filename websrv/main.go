@@ -2,10 +2,16 @@ package main
 
 import (
 	"bytes"
-	"html/template"
+	"fmt"
+	"image"
+	"image/jpeg"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
+	"robit/camera"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -15,15 +21,38 @@ import (
 )
 
 var (
+	// ~30 frames per second
+	frameDelay        = 33 * time.Millisecond
 	alreadyControlled = false
 	controlledLock    sync.Mutex
 )
 
 func main() {
+	var (
+		viewers   []chan<- image.Image
+		newViewer chan chan<- image.Image
+		byeViewer chan chan<- image.Image
+	)
+
+	// Windows isn't a fan of accessing devices and such from threads other than the one it was first accessed on
+	runtime.LockOSThread()
+
+	cam, err := camera.OpenCamera()
+	if err != nil {
+		log.Println(err)
+	} else {
+		defer cam.Release()
+
+		viewers = make([]chan<- image.Image, 0, 64)
+		newViewer = make(chan chan<- image.Image, 8)
+		byeViewer = make(chan chan<- image.Image, 8)
+	}
+
+	// TODO open (socket?) video stream locally, then use to provide bytes to requests to /watch/{type}
+
 	router := mux.NewRouter()
 	router.Path("/watch").Methods("GET").HandlerFunc(watchHandler)
-	router.Path("/watch/dash").Methods("GET").HandlerFunc(watchDashHandler)
-	router.Path("/watch/hls").Methods("GET").HandlerFunc(watchHlsHandler)
+	router.Path("/watch/mjpeg").Methods("GET").HandlerFunc(watchMjpegImgHandler(newViewer, byeViewer))
 	router.Path("/control").Methods("GET").HandlerFunc(controlRequestHandler)
 	router.Path("/control/run").Methods("GET").HandlerFunc(controlRunHandler)
 	router.Path("/control/ws").Methods("GET").HandlerFunc(controlSocketHandler)
@@ -36,78 +65,192 @@ func main() {
 		Handler:        router,
 	}
 
-	// TODO open (socket?) video stream locally, then use to provide bytes to requests to /watch/{type}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			log.Println("ListenAndServe():", err)
+			os.Exit(1)
+		}
+	}()
 
-	if err := srv.ListenAndServe(); err != nil {
-		log.Println("ListenAndServe():", err)
-		os.Exit(1)
+	// let's aim for a fixed update rate - helps us keep from doing extra work
+	frameTick := time.NewTicker(frameDelay)
+	defer frameTick.Stop()
+
+	if err := cam.Start(); err != nil {
+		log.Println("Error starting camera streaming:", err)
+		return
+	}
+	defer cam.Stop()
+
+	for {
+		select {
+		case nv := <-newViewer:
+			viewers = append(viewers, nv)
+
+		case bv := <-byeViewer:
+			for i, v := range viewers {
+				if v == bv {
+					last := len(viewers) - 1
+					viewers[last], viewers[i] = viewers[i], viewers[last]
+					close(viewers[last])
+					viewers = viewers[:last]
+					break
+				}
+			}
+
+		case <-frameTick.C:
+			f, err := cam.CaptureFrame()
+			if err != nil {
+				log.Println("Camera.CaptureFrame():", err)
+				return
+			}
+
+			for _, v := range viewers {
+				v <- f
+			}
+		}
 	}
 }
 
-var watchTmpl = template.Must(template.New("watch").Parse(`<!doctype html>
-<html>
-<head>
-	<meta charset="utf-8">
-</head>
-<body>
-	<video autoplay width="720">
-		<source src="/watch/{{ . }}" type="video/mp4">
-		<p>Your browser doesn't support HTML5 video. Get yourself a better browser, kid:
-			<ul>
-				<li><a href="https://www.google.com/chrome/browser/desktop/index.html">Google Chrome</a></li>
-				<li><a href="https://www.mozilla.org/en-US/firefox/">Firefox</a></li>
-			</ul>
-		</p>
-	</video>
-</body>
-</html>`))
+var watchPage = Page{
+	Head: PageHead{
+		Title: "Robit: Watch",
+	},
+	Body: PageBody{
+		Header: []Element{
+			{
+				Type:    "h1",
+				Content: "Watch",
+			},
+		},
+		Main: []Element{
+			{
+				Type: "img",
+				Attributes: []Attribute{
+					{"src", "/watch/mjpeg"},
+					{"width", "720"},
+					{"alt", "Unable to display the stream!"},
+				},
+				Empty: true,
+			},
+		},
+		Footer: []Element{
+		/*{
+			Type: "a",
+			Attributes: []Attribute{
+				{"href", "/control"},
+			},
+			Content: "Take control?",
+		},*/
+		},
+	},
+}
 
 func watchHandler(w http.ResponseWriter, r *http.Request) {
-	var buf bytes.Buffer
+	err := watchPage.Build(w)
+	if err != nil {
+		log.Println("Error building /watch:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
 
-    log.Println(r.UserAgent())
-    
-    serveHls := strings.Contains(r.UserAgent(), "Safari") &&
-        !(strings.Contains(r.UserAgent(), "Chrome") || strings.Contains(r.UserAgent(), "Firefox"))
-    
-	if serveHls {
-		watchTmpl.Execute(&buf, "hls")
-	} else {
-		watchTmpl.Execute(&buf, "dash")
+func watchMjpegImgHandler(add, bye chan chan<- image.Image) http.HandlerFunc {
+	if add == nil || bye == nil {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
 	}
 
-	w.Write(buf.Bytes())
+	return func(w http.ResponseWriter, r *http.Request) {
+		multiW := multipart.NewWriter(w)
+		multiW.SetBoundary("--boundary")
+		defer multiW.Close()
+
+		w.Header().Add("Connection", "close")
+		w.Header().Add("Cache-Control", "no-store, no-cache")
+		w.Header().Add("Content-Type", fmt.Sprintf("multipart/x-mixed-replace;boundary=%s", multiW.Boundary()))
+		w.WriteHeader(http.StatusOK)
+
+		closing := w.(http.CloseNotifier).CloseNotify()
+
+		frameC := make(chan image.Image, 2)
+		add <- frameC
+
+		for {
+			select {
+			case <-closing:
+				bye <- frameC
+				return
+
+			case f := <-frameC:
+				buf := bytes.Buffer{}
+
+				err := jpeg.Encode(&buf, f, nil)
+				if err != nil {
+					log.Println("jpeg.Encode() error:", err)
+				}
+
+				partH := textproto.MIMEHeader{}
+				partH.Add("Content-Type", "image/jpeg")
+
+				partW, err := multiW.CreatePart(partH)
+				if err != nil {
+					log.Println("mjpeg handler: multipart.Writer.CreatePart():", err)
+					continue
+				}
+
+				partW.Write(buf.Bytes())
+			}
+		}
+	}
 }
 
-func watchDashHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Accept-Ranges", "bytes")
-	w.WriteHeader(http.StatusPartialContent)
-}
-
-func watchHlsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Accept-Ranges", "bytes")
-	w.WriteHeader(http.StatusPartialContent)
+var alreadyControlledPage = Page{
+	Head: PageHead{
+		Title: "Robot: Cannot Control",
+	},
+	Body: PageBody{
+		Header: []Element{
+			{
+				Type:    "h1",
+				Content: "Robot is already being controlled!",
+			},
+		},
+		Main: []Element{
+			{
+				Type: "p",
+				Children: []Element{
+					{
+						Type:    "div",
+						Content: "Try again later!",
+					},
+					{
+						Type: "a",
+						Attributes: []Attribute{
+							{"href", "/watch"},
+						},
+						Content: "Watch in the meantime?",
+					},
+				},
+			},
+		},
+	},
 }
 
 func controlRequestHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+	return
+
 	controlledLock.Lock()
 	if alreadyControlled {
 		controlledLock.Unlock()
 
-		w.WriteHeader(http.StatusLocked)
+		err := alreadyControlledPage.Build(w)
+		if err != nil {
+			log.Println("Error building /control already controlled:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 
-		var buf bytes.Buffer
-		buf.WriteString(`<!doctype html>
-<html>
-<head>
-	<meta charset="utf-8">
-</head>
-<body>
-	<p>Someone else is already controlling the robot! Try again later. <a href="/watch">Watch</a> live in the meantime?</p>
-</body>
-</html>`)
-
-		w.Write(buf.Bytes())
 		return
 	}
 
@@ -118,98 +261,122 @@ func controlRequestHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Location", "/control/run")
 }
 
+var controlRunPage = Page{
+	Head: PageHead{
+		Title: "Robit: Control!",
+		Scripts: []string{
+			`let ws = new WebSocket("/control/ws");
+			
+			window.addEventListener("beforeunload", function(event) {
+				ws.close();
+			});
+	
+			document.addEventListener("keydown", function(event)
+			{
+				if(event.repeat) return;
+	
+				switch(event.code)
+				{
+					case "KeyS":
+					case "ArrowDown":
+						ws.send("down:start");
+						break;
+	
+					case "KeyW":
+					case "ArrowUp":
+						ws.send("up:start");
+						break;
+	
+					case "KeyA":
+					case "ArrowLeft":
+						ws.send("left:start");
+						break;
+	
+					case "KeyD":
+					case "ArrowRight":
+						ws.send("right:start");
+						break;
+				}
+	
+				event.preventDefault();
+			});
+	
+			document.addEventListener("keyup", function(event)
+			{
+				if(event.repeat) return;
+	
+				switch(event.code)
+				{
+					case "KeyS":
+					case "ArrowDown":
+						ws.send("down:end");
+						break;
+	
+					case "KeyW":
+					case "ArrowUp":
+						ws.send("up:end");
+						break;
+	
+					case "KeyA":
+					case "ArrowLeft":
+						ws.send("left:end");
+						break;
+	
+					case "KeyD":
+					case "ArrowRight":
+						ws.send("right:end");
+						break;
+				}
+	
+				event.preventDefault();
+			});`,
+		},
+	},
+	Body: PageBody{
+		Header: []Element{
+			{
+				Type:    "h1",
+				Content: "Control!",
+			},
+		},
+		Main: []Element{
+			{
+				Type: "img",
+				Attributes: []Attribute{
+					{"src", "/watch/mjpeg"},
+					{"width", "720"},
+					{"alt", "Unable to display the stream!"},
+				},
+				Empty: true,
+			},
+		},
+		Footer: []Element{
+			{
+				Type: "a",
+				Attributes: []Attribute{
+					{"href", "/watch"},
+				},
+				Content: "Just watch?",
+			},
+		},
+	},
+}
+
 func controlRunHandler(w http.ResponseWriter, r *http.Request) {
-	var buf bytes.Buffer
+	w.WriteHeader(http.StatusNotImplemented)
+	return
 
-	buf.WriteString(`<!doctype html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<script>
-		let ws = new WebSocket("/control/ws");
-		
-		window.addEventListener("unload", function(event) {
-			ws.close();
-		});
-
-		document.addEventListener("keydown", function(event)
-		{
-			if(event.repeat) return;
-
-			switch(event.code)
-			{
-				case "KeyS":
-				case "ArrowDown":
-					ws.send("down:start");
-					break;
-
-				case "KeyW":
-				case "ArrowUp":
-					ws.send("up:start");
-					break;
-
-				case "KeyA":
-				case "ArrowLeft":
-					ws.send("left:start");
-					break;
-
-				case "KeyD":
-				case "ArrowRight":
-					ws.send("right:start");
-					break;
-			}
-
-			event.preventDefault();
-		});
-
-		document.addEventListener("keyup", function(event)
-		{
-			if(event.repeat) return;
-
-			switch(event.code)
-			{
-				case "KeyS":
-				case "ArrowDown":
-					ws.send("down:end");
-					break;
-
-				case "KeyW":
-				case "ArrowUp":
-					ws.send("up:end");
-					break;
-
-				case "KeyA":
-				case "ArrowLeft":
-					ws.send("left:end");
-					break;
-
-				case "KeyD":
-				case "ArrowRight":
-					ws.send("right:end");
-					break;
-			}
-
-			event.preventDefault();
-		});
-	</script>
-</head>
-<body>
-	<video autoplay width="720">
-		<source src="/watch/{{ . }}" type="video/mp4">
-		<p>Your browser doesn't support HTML5 video. Get yourself a better browser, kid:
-			<ul>
-				<li><a href="https://www.google.com/chrome/browser/desktop/index.html">Google Chrome</a></li>
-				<li><a href="https://www.mozilla.org/en-US/firefox/">Firefox</a></li>
-			</ul>
-		</p>
-	</video>
-</body>
-</html>`)
-
-	w.Write(buf.Bytes())
+	err := controlRunPage.Build(w)
+	if err != nil {
+		log.Println("Error building /control/run:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func controlSocketHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+	return
+
 	if !websocket.IsWebSocketUpgrade(r) {
 		w.WriteHeader(http.StatusUpgradeRequired)
 		return
@@ -241,22 +408,22 @@ func controlSocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		inputs := strings.Split(string(msg), ":")
-		
+
 		if len(inputs) < 2 {
 			log.Println("Ill-formed control message receieved:", msg)
 			continue
 		}
-		
+
 		// TODO start := inputs[1] == "start"
-		
+
 		// TODO send socket message to robot program for each case
 		switch inputs[0] {
 		case "up":
-		
+
 		case "down":
-		
+
 		case "left":
-		
+
 		case "right":
 		}
 	}

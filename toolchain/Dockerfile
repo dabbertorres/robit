@@ -30,11 +30,13 @@ run wget http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-${CT_NG_VERS
 # build our toolchain! (installs to /opt/gcc-rpi)
 workdir /build
 copy defconfig .
-run ct-ng defconfig && \
-    ct-ng build
+run ct-ng defconfig
+
+# run dependency fetching in a different stage from building to save time/repetition in case of errors
+run ct-ng source
+run ct-ng build
 
 # final image
 from debian:stretch-slim
 copy --from=builder /opt/gcc-rpi /opt/gcc-rpi
 env PATH=$PATH:/opt/gcc-rpi/bin
-
