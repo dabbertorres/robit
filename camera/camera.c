@@ -23,20 +23,30 @@ struct camera
     int fd;
     struct buffer* buffers;
     size_t buffers_count;
-    struct frame user_frame;
+    struct camera_frame user_frame;
     pthread_mutex_t user_frame_mutex;
     pthread_t capture_thread;
 };
+
+extern enum camera_pixel_format convert_fourcc(uint32_t fourcc);
+extern uint32_t convert_pixel_format(enum camera_pixel_format f);
+extern enum camera_colorspace convert_colorspace(enum v4l2_colorspace c);
 
 int ioctl_help(int fd, int req, void* data);
 
 struct camera* camera_alloc()
 {
-    return malloc(sizeof(struct camera));
+    struct camera* cam = malloc(sizeof(struct camera));
+
+    pthread_mutex_init(&cam->user_frame_mutex, NULL);
+
+    return cam;
 }
 
 void camera_free(struct camera* cam)
 {
+    pthread_mutex_destroy(&cam->user_frame_mutex);
+
     free(cam);
 }
 
@@ -44,13 +54,13 @@ enum camera_error camera_open(const char* path, struct camera* cam)
 {
     int status = CAMERA_SUCCESS;
 
-    int fd = open(path, O_RDWR | O_NONBLOCK, 0);
-    if(fd == -1)
+    cam->fd = open(path, O_RDWR | O_NONBLOCK, 0);
+    if(cam->fd == -1)
         return CAMERA_ERROR_OPEN;
 
     // get device capabilities
     struct v4l2_capability cap;
-    int err = ioctl_help(fd, VIDIOC_QUERYCAP, &cap);
+    int err = ioctl_help(cam->fd, VIDIOC_QUERYCAP, &cap);
 
     // make sure the device satisfies our requirements
 
@@ -72,39 +82,71 @@ enum camera_error camera_open(const char* path, struct camera* cam)
         goto fail;
     }
 
+    return status;
+
+fail:
+    close(cam->fd);
+    cam->fd = 0;
+    return status;
+}
+
+void camera_close(struct camera* cam)
+{
+    if(cam->fd != 0)
+        close(cam->fd);
+}
+
+enum camera_error camera_init(struct camera* cam)
+{
+    enum camera_error status = CAMERA_SUCCESS;
+    
+    // set-up memory access 
     struct v4l2_requestbuffers req;
     memset(&req, 0, sizeof(req));
 
-    // arbitrary really
+    // arbitrary amount really
     req.count = 4;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_MMAP;
 
-    err = ioctl_help(fd, VIDIOC_REQBUFS, &req);
+    int err = ioctl_help(cam->fd, VIDIOC_REQBUFS, &req);
     if(err == -1 && errno == EINVAL)
     {
         status = CAMERA_ERROR_NO_MMAP;
-        goto fail;
+        goto done;
     }
 
-    // camera will theoretically work. will it work for real?
+    // at this point we know the camera will (theoretically) work.
 
     // we want a minimum of 2 buffers - front and back
     if(req.count < 2)
     {
         status = CAMERA_ERROR_OUT_OF_BUFFER_MEM;
-        goto fail;
+        goto done;
     }
 
     cam->buffers = malloc(req.count * sizeof(struct buffer));
     if(cam->buffers == NULL)
     {
         status = CAMERA_ERROR_OUT_OF_MEMORY;
-        goto fail;
+        goto done;
     }
 
-    // TODO figure out the size the camera wants to stream at (see struct frame)
-    // then malloc cam->user_frame.data, and assign cam->user_frame's other fields
+    // how is the data the camera is giving us formatted?
+    err = camera_get_format(cam, &cam->user_frame.format);
+    if(err != 0)
+    {
+        status = err;
+        goto done;
+    }
+
+    // now that we know details about frames, malloc the frame data once for reuse
+    cam->user_frame.data = malloc(cam->user_frame.format.byte_size);
+    if(cam->user_frame.data == NULL)
+    {
+        status = CAMERA_ERROR_OUT_OF_MEMORY;
+        goto done;
+    }
 
     // got our buffers, now lets mmap them
 
@@ -119,79 +161,112 @@ enum camera_error camera_open(const char* path, struct camera* cam)
         buf.memory = V4L2_MEMORY_MMAP;
         buf.index = i;
 
-        err = ioctl_help(fd, VIDIOC_QUERYBUF, &buf);
+        err = ioctl_help(cam->fd, VIDIOC_QUERYBUF, &buf);
         if(err == -1)
         {
             status = CAMERA_ERROR_MMAP_FAILED;
-            goto fail;
+            break;
         }
 
         struct buffer* cbuf = &cam->buffers[i];
         cbuf->length = buf.length;
-        cbuf->ptr = mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, buf.m.offset);
+        cbuf->ptr = mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, cam->fd, buf.m.offset);
 
         if(cbuf->ptr == MAP_FAILED)
         {
             status = CAMERA_ERROR_MMAP_FAILED;
-            goto fail;
+            break;
         }
     }
-
-    pthread_mutex_init()
-
+    
     // finally, success!
-
-    cam->fd = fd;
 
 done:
     return status;
-
-fail:
-    close(fd);
-    return status;
 }
 
-void camera_close(struct camera* cam)
+void camera_deinit(struct camera* cam)
 {
     for(size_t i = 0; i < cam->buffers_count; ++i)
         munmap(cam->buffers[i].ptr, cam->buffers[i].length);
-
-    close(cam->fd);
+    
+    if(cam->user_frame.data != NULL)
+        free(cam->user_frame.data);
 }
 
-enum camera_error camera_get_format(struct camera_format* format)
+int camera_enumerate_formats(struct camera* cam, int index, struct camera_format_desc* desc)
 {
-    v4l2_format fmt;
+    struct v4l2_fmtdesc fmt;
+    memset(&fmt, 0, sizeof(struct v4l2_fmtdesc));
+
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.index = index;
+
+    int status = ioctl_help(cam->fd, VIDIOC_ENUM_FMT, &fmt);
+
+    if(status == 0)
+    {
+        desc->index = index;
+        desc->compressed = fmt.flags & V4L2_FMT_FLAG_COMPRESSED;
+        desc->emulated = fmt.flags & V4L2_FMT_FLAG_EMULATED;
+        memcpy(desc->description, fmt.description, 32);
+        desc->pixel_format = convert_fourcc(fmt.pixelformat);
+
+        return index + 1;
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+struct camera_format* camera_get_user_format(struct camera* cam)
+{
+    return &cam->user_frame.format;
+}
+
+enum camera_error camera_get_format(struct camera* cam, struct camera_format* format)
+{
+    struct v4l2_format fmt;
+    memset(&fmt, 0, sizeof(struct v4l2_format));
+
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
     int err = ioctl_help(cam->fd, VIDIOC_G_FMT, &fmt);
-    if(err == -1)
+    if(err != 0)
         return err;
 
     format->width = fmt.fmt.pix.width;
     format->height = fmt.fmt.pix.height;
     format->stride = fmt.fmt.pix.bytesperline;
-    format->channels = format->stride / format->width;
+    format->byte_size = fmt.fmt.pix.sizeimage;
+    format->pixel_format = convert_fourcc(fmt.fmt.pix.pixelformat);
+    format->colorspace = convert_colorspace(fmt.fmt.pix.colorspace);
 
     return CAMERA_SUCCESS;
 }
 
-enum camera_error camera_set_format(struct camera_format* format)
+enum camera_error camera_set_format(struct camera* cam, struct camera_format* format)
 {
-    v4l2_format fmt;
+    struct v4l2_format fmt;
+    memset(&fmt, 0, sizeof(struct v4l2_format));
+
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
     fmt.fmt.pix.width = format->width;
     fmt.fmt.pix.height = format->height;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB24;
-    fmt.fmt.pix.field = V4L2_FIELD_INTERLACED;
+    fmt.fmt.pix.pixelformat  = convert_pixel_format(format->pixel_format);
 
     int err = ioctl_help(cam->fd, VIDIOC_S_FMT, &fmt);
-    if(err == -1)
+    if(err != 0)
         return err;
 
     format->width = fmt.fmt.pix.width;
     format->height = fmt.fmt.pix.height;
     format->stride = fmt.fmt.pix.bytesperline;
-    format->channels = format->stride / format->width;
+    format->byte_size = fmt.fmt.pix.sizeimage;
+    format->pixel_format = convert_fourcc(fmt.fmt.pix.pixelformat);
+    format->colorspace = convert_colorspace(fmt.fmt.pix.colorspace);
 
     return CAMERA_SUCCESS;
 }
@@ -199,7 +274,7 @@ enum camera_error camera_set_format(struct camera_format* format)
 void camera_init_frame(struct camera* cam, struct camera_frame* frame)
 {
     memcpy(frame, &cam->user_frame, sizeof(struct camera_frame));
-    frame->data = malloc(frame->stride * frame->height);
+    frame->data = malloc(frame->format.byte_size);
 }
 
 void camera_release_frame(struct camera_frame* frame)
@@ -249,7 +324,7 @@ void* camera_capture_frame_loop(struct camera* cam)
             return (void*)errno;
 
         pthread_mutex_lock(&cam->user_frame_mutex);
-        memcpy(cam->user_frame->data, cam->buffers[buf.index].start, buf.bytesused);
+        memcpy(cam->user_frame.data, cam->buffers[buf.index].ptr, buf.bytesused);
         pthread_mutex_unlock(&cam->user_frame_mutex);
 
         // hand buffer back to driver
@@ -284,11 +359,11 @@ enum camera_error camera_capture_start(struct camera* cam)
     }
     else
     {
-        err = pthread_create(&cam->capture_thread, NULL, camera_capture_frame_loop, cam);
+        err = pthread_create(&cam->capture_thread, NULL, (void*(*)(void*))camera_capture_frame_loop, cam);
         if(err != 0)
         {
             camera_capture_stop(cam);
-            return err
+            return err;
         }
         else
         {
@@ -300,7 +375,7 @@ enum camera_error camera_capture_start(struct camera* cam)
 enum camera_error camera_capture_frame(struct camera* cam, struct camera_frame* frame)
 {
     pthread_mutex_lock(&cam->user_frame_mutex);
-    memcpy(frame->data, cam->user_frame.data, frame->stride * frame->height);
+    memcpy(frame->data, cam->user_frame.data, frame->format.stride * frame->format.height);
     pthread_mutex_unlock(&cam->user_frame_mutex);
     return CAMERA_SUCCESS;
 }
@@ -311,7 +386,7 @@ enum camera_error camera_capture_stop(struct camera* cam)
 
     enum v4l2_buf_type bufType = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    err = ioctl_help(cam->fd, VIDIOC_STREAMOFF, &bufType);
+    int err = ioctl_help(cam->fd, VIDIOC_STREAMOFF, &bufType);
     if(err == -1)
     {
         return CAMERA_ERROR_STREAM_STOP_FAIL;
@@ -340,6 +415,9 @@ int ioctl_help(int fd, int req, void* data)
         r = ioctl(fd, req, data);
     while(r == -1 && errno == EINTR);
 
-    return r;
+    if(r < 0)
+        return errno;
+    else
+        return 0;
 }
 
