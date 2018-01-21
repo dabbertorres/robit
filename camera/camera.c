@@ -220,11 +220,6 @@ int camera_enumerate_formats(struct camera* cam, int index, struct camera_format
     }
 }
 
-struct camera_format* camera_get_user_format(struct camera* cam)
-{
-    return &cam->user_frame.format;
-}
-
 enum camera_error camera_get_format(struct camera* cam, struct camera_format* format)
 {
     struct v4l2_format fmt;
@@ -267,6 +262,8 @@ enum camera_error camera_set_format(struct camera* cam, struct camera_format* fo
     format->byte_size = fmt.fmt.pix.sizeimage;
     format->pixel_format = convert_fourcc(fmt.fmt.pix.pixelformat);
     format->colorspace = convert_colorspace(fmt.fmt.pix.colorspace);
+
+    cam->user_frame.format = *format;
 
     return CAMERA_SUCCESS;
 }

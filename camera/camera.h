@@ -212,9 +212,6 @@ void camera_deinit(struct camera* cam);
 // once no more formats are available to enumerate (or an error occurs), it returns negative
 int camera_enumerate_formats(struct camera* cam, int index, struct camera_format_desc* desc);
 
-// TODO toss?
-struct camera_format* camera_get_user_format(struct camera* cam);
-
 enum camera_error camera_get_format(struct camera* cam, struct camera_format* format);
 
 // requests the driver to apply the named format, and returns the resulting format set by the driver
