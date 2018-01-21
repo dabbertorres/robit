@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include <errno.h>
+#include <unistd.h>
 
 #include <turbojpeg.h>
 
@@ -78,9 +79,10 @@ int main(int argc, char** argv)
         format.pixel_format,
         format.colorspace);
 
-    format.pixel_format = CAMERA_PIXEL_FORMAT_JPEG;
+    format.pixel_format = CAMERA_PIXEL_FORMAT_BGR24;
     format.width = 1280;
     format.height = 720;
+    format.colorspace = CAMERA_COLORSPACE_DEFAULT;
 
     err = camera_set_format(camera, &format);
     if(err != CAMERA_SUCCESS)
@@ -143,6 +145,9 @@ int main(int argc, char** argv)
     }
     printf("Camera stream started\n");
 
+    // let the camera warm up for 500ms to avoid an initial black image
+    usleep(500000);
+
     for(int i = 0; i < 10; ++i)
     {
         err = camera_capture_frame(camera, &frame);
@@ -157,10 +162,10 @@ int main(int argc, char** argv)
         }
 
         // write ourselves a jpg!
-        unsigned long frameSize;
+        unsigned long frameSize = jpegBufSize;
         int status = tjCompress2(jpegCompress, frame.data,
             format.width, format.stride, format.height,
-            TJPF_RGB, &jpegBuf, &frameSize, TJSAMP_444, 75, TJFLAG_NOREALLOC);
+            TJPF_BGR, &jpegBuf, &frameSize, TJSAMP_444, 90, TJFLAG_NOREALLOC);
 
         if(status != 0)
         {
@@ -180,8 +185,8 @@ int main(int argc, char** argv)
             continue;
         }
 
-        size_t written = fwrite(frame.data, 1, frame.format.byte_size, outFile);
-        if(written < frameSize)
+        size_t written = fwrite(jpegBuf, 1, frameSize, outFile);
+        if(written != frameSize)
             printf("fwrite() error: bytes written (%d) did not match expected (%d)!\n", written, frameSize);
 
         fclose(outFile);
@@ -217,3 +222,4 @@ done_free:
 
     return 0;
 }
+
