@@ -279,7 +279,7 @@ void camera_release_frame(struct camera_frame* frame)
     free(frame->data);
 }
 
-void* camera_capture_frame_loop(struct camera* cam)
+int camera_capture_frame_loop(struct camera* cam)
 {
     for(;;)
     {
@@ -301,11 +301,11 @@ void* camera_capture_frame_loop(struct camera* cam)
                 // just an interrupt? it's fine
                 // otherwise, crap
                 if(errno != EINTR)
-                    return (void*)errno;
+                    return errno;
 
             case 0:
                 // timeout... lost connection?
-                return (void*)CAMERA_ERROR_TIMEOUT;
+                return CAMERA_ERROR_TIMEOUT;
         }
 
         struct v4l2_buffer buf;
@@ -318,7 +318,7 @@ void* camera_capture_frame_loop(struct camera* cam)
         err = ioctl_help(cam->fd, VIDIOC_DQBUF, &buf);
         // if not just a wake up - stop select() loop
         if(err == -1 && errno != EAGAIN)
-            return (void*)errno;
+            return errno;
 
         pthread_mutex_lock(&cam->user_frame_mutex);
         memcpy(cam->user_frame.data, cam->buffers[buf.index].ptr, buf.bytesused);
@@ -327,7 +327,7 @@ void* camera_capture_frame_loop(struct camera* cam)
         // hand buffer back to driver
         err = ioctl_help(cam->fd, VIDIOC_QBUF, &buf);
         if(err == -1)
-            return (void*)errno;
+            return errno;
     }
 }
 
