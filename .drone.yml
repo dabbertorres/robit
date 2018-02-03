@@ -1,0 +1,17 @@
+pipeline:
+  gpio:
+    image: dabbertorres/rpi3-gcc
+    commands:
+      - make -C robit/gpio
+  robit:
+    image: dabbertorres/rpi3-gcc
+    commands:
+      - make -C robit/robit
+  camera:
+    image: dabbertorres/rpi3-go
+    commands:
+      - GOOS=linux GOARCH=arm GOARM=7 go build robit/camera
+  websrv:
+    image: dabbertorres/rpi3-go
+    commands:
+      - GOOS=linux GOARCH=arm GOARM=7 go build robit/websrv
