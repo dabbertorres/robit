@@ -1,8 +1,13 @@
 CC := rpi3-cc
+AR := rpi3-ar
 
 CFLAGS := -Wall -Wextra -O2
 
-SRC := main.c
+SRC := gpio.c
+OBJ := $(SRC:%.c=%.o)
 
-robit: $(SRC)
-	$(CC) -o $@ $(CFLAGS) $^
+gpio.a: $(OBJ)
+	$(AR) rcs $@ $^
+
+gpio.o: gpio.c gpio.h
+	$(CC) -o $@ $(CFLAGS) -c $<
