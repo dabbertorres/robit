@@ -1,8 +1,5 @@
 #pragma once
 
-#define GPIO_OFF 0
-#define GPIO_ON 1
-
 enum gpio_dir {
     GPIO_IN = 0,
     GPIO_OUT = 1,
