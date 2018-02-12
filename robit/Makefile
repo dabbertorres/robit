@@ -1,16 +1,25 @@
-CC := rpi3-cc
+SRC := main.c
 
-DOCKER ?= docker
+OBJ_DIR := obj
+OBJS := $(addprefix $(OBJ_DIR)/,$(SRC:%.c=%.o))
 
-BUILD_DIR ?= /rpi3-build
+LDFLAGS := -L$(OUT_DIR)
 
-TOOLCHAIN_IMG := dabbertorres/rpi3-gcc
+DEPS := -l:gpio.a
 
-all: sockSrv robit
+.PHONY: clean
 
-sockSrv: main.c
-	${DOCKER} run -v ${PWD}:${BUILD_DIR} -w ${BUILD_DIR} --rm ${TOOLCHAIN_IMG} ${CC} -o $@ -static $^
+$(OUT_DIR)/robit: $(OBJS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(DEPS)
 
-robit: main.go
-	GOOS=linux GOARCH=arm go build -o robit
+$(OBJ_DIR)/%.o: %.c
+	$(CC) -o $@ $(CFLAGS) -c $<
+
+$(OBJS): | $(OBJ_DIR)
+
+$(OBJ_DIR):
+	mkdir $(OBJ_DIR)
+
+clean:
+	@rm -rf $(OBJ_DIR)
 
