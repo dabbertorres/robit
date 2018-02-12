@@ -3,7 +3,7 @@ package v4l2
 import (
 	"reflect"
 
-	"robit/camera/ioctl"
+	"github.com/dabbertorres/robit/camera/ioctl"
 )
 
 func QueryCapCode() ioctl.Code { return ioctl.Ior('V', 0, reflect.TypeOf(Capability{})) }

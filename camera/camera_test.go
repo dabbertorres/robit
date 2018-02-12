@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"robit/camera/v4l2"
+	"github.com/dabbertorres/robit/camera/v4l2"
 )
 
 func Test(t *testing.T) {

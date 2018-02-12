@@ -2,16 +2,29 @@ pipeline:
   gpio:
     image: dabbertorres/rpi3-gcc
     commands:
+      - export CC=rpi3-cc
+      - export AR=rpi3-ar
+      - export CFLAGS="-Wall -Wextra -O2"
       - make -C gpio
   robit:
     image: dabbertorres/rpi3-gcc
     commands:
+      - export CC=rpi3-cc
+      - export AR=rpi3-ar
+      - export CFLAGS="-Wall -Wextra -O2"
       - make -C robit
   camera:
-    image: dabbertorres/rpi3-go
+    image: golang:1.9
     commands:
-      - GOOS=linux GOARCH=arm GOARM=7 go build robit/camera
+      - export GOOS=linux
+      - export GOARCH=arm
+      - export GOARM=7
+      - go build robit/camera
   websrv:
-    image: dabbertorres/rpi3-go
+    image: golang:1.9
     commands:
-      - GOOS=linux GOARCH=arm GOARM=7 go build robit/websrv
+      - export GOOS=linux
+      - export GOARCH=arm
+      - export GOARM=7
+      - go build robit/websrv
+

@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
-	"robit/camera"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dabbertorres/robit/camera"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )

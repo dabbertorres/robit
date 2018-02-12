@@ -6,8 +6,8 @@ import (
 	"os"
 	"unsafe"
 
-	"robit/camera/ioctl"
-	"robit/camera/v4l2"
+	"github.com/dabbertorres/robit/camera/ioctl"
+	"github.com/dabbertorres/robit/camera/v4l2"
 
 	"golang.org/x/sys/unix"
 )
