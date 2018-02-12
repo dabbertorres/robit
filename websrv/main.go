@@ -11,7 +11,6 @@ import (
 	"net/textproto"
 	"os"
 	"robit/camera"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -34,14 +33,11 @@ func main() {
 		byeViewer chan chan<- image.Image
 	)
 
-	// Windows isn't a fan of accessing devices and such from threads other than the one it was first accessed on
-	runtime.LockOSThread()
-
-	cam, err := camera.OpenCamera()
+	cam, err := camera.OpenCamera("/dev/video0")
 	if err != nil {
 		log.Println(err)
 	} else {
-		defer cam.Release()
+		defer cam.Close()
 
 		viewers = make([]chan<- image.Image, 0, 64)
 		newViewer = make(chan chan<- image.Image, 8)
@@ -76,11 +72,12 @@ func main() {
 	frameTick := time.NewTicker(frameDelay)
 	defer frameTick.Stop()
 
-	if err := cam.Start(); err != nil {
+	cancel, errC, err := cam.Start()
+	if err != nil {
 		log.Println("Error starting camera streaming:", err)
 		return
 	}
-	defer cam.Stop()
+	defer cancel()
 
 	for {
 		select {
@@ -99,16 +96,11 @@ func main() {
 			}
 
 		case <-frameTick.C:
-			f, err := cam.CaptureFrame()
-			if err != nil {
-				log.Println("Camera.CaptureFrame():", err)
-				return
-			}
-
-			for _, v := range viewers {
-				v <- f
-			}
 		}
+	}
+
+	if err, ok := <-errC; ok && err != nil {
+		log.Println("Error from camera capture:", err)
 	}
 }
 
@@ -266,68 +258,68 @@ var controlRunPage = Page{
 		Title: "Robit: Control!",
 		Scripts: []string{
 			`let ws = new WebSocket("/control/ws");
-			
+
 			window.addEventListener("beforeunload", function(event) {
 				ws.close();
 			});
-	
+
 			document.addEventListener("keydown", function(event)
 			{
 				if(event.repeat) return;
-	
+
 				switch(event.code)
 				{
 					case "KeyS":
 					case "ArrowDown":
 						ws.send("down:start");
 						break;
-	
+
 					case "KeyW":
 					case "ArrowUp":
 						ws.send("up:start");
 						break;
-	
+
 					case "KeyA":
 					case "ArrowLeft":
 						ws.send("left:start");
 						break;
-	
+
 					case "KeyD":
 					case "ArrowRight":
 						ws.send("right:start");
 						break;
 				}
-	
+
 				event.preventDefault();
 			});
-	
+
 			document.addEventListener("keyup", function(event)
 			{
 				if(event.repeat) return;
-	
+
 				switch(event.code)
 				{
 					case "KeyS":
 					case "ArrowDown":
 						ws.send("down:end");
 						break;
-	
+
 					case "KeyW":
 					case "ArrowUp":
 						ws.send("up:end");
 						break;
-	
+
 					case "KeyA":
 					case "ArrowLeft":
 						ws.send("left:end");
 						break;
-	
+
 					case "KeyD":
 					case "ArrowRight":
 						ws.send("right:end");
 						break;
 				}
-	
+
 				event.preventDefault();
 			});`,
 		},
