@@ -5,128 +5,109 @@
 
 #include "gpio.h"
 
-int gpio_register_pin(enum gpio_pin pin)
+struct gpio_pin
 {
-    char buffer[3];
+    int fd;
+};
+
+int gpio_register_pin(int pin_num, enum gpio_direction dir, struct gpio_pin* pin)
+{
+    // Largest possible length of a string we're dealing with
+    char buffer[35];
     int bytes_written;
     int fd;
-    int ret = 0;
+    int file_mode;
+    int write_sts;
+
+    /* tell the system we want to use this pin */
 
     fd = open("/sys/class/gpio/export", O_WRONLY);
-    if (fd < 0) {
-        ret = -1;
-        goto done;
-    }
-    
-    bytes_written = snprintf(buffer, 3, "%d", pin);
-    if (write(fd, buffer, bytes_written) < 0) {
-        ret = -1;
-        goto done;
+    if (fd < 0)
+        return -1;
+
+    bytes_written = snprintf(buffer, 3, "%d", pin_num);
+    write_sts = write(fd, buffer, bytes_written);
+    close(fd);
+
+    if (write_sts < 0)
+        return -1;
+
+    /* now are we reading, or writing? */
+
+    snprintf(buffer, 35, "/sys/class/gpio/gpio%d/direction", pin_num);
+    fd = open(buffer, O_WRONLY);
+    if(fd < 0)
+        return -1;
+
+    if(dir == GPIO_R) {
+        write_sts = write(fd, "in", 2);
+        file_mode = O_RDONLY;
+    } else {
+        write_sts = write(fd, "out", 3);
+        file_mode = O_WRONLY;
     }
 
-done:
     close(fd);
-    return ret;
+
+    if(write_sts < 0)
+        return -1;
+
+    /* now let's grab the place we're reading/writing to/from */
+
+    snprintf(buffer, 30, "/sys/class/gpio/gpio%d/value", pin_num);
+    pin->fd = open(buffer, file_mode);
+
+    if(pin->fd < 0)
+        return -1;
+    else
+        return 0;
 }
 
-int gpio_unregister_pin(enum gpio_pin pin)
+int gpio_unregister_pin(struct gpio_pin* pin)
 {
     char buffer[3];
     int bytes_written;
     int fd;
-    int ret = 0;
+    int write_sts;
+
+    close(pin->fd);
 
     fd = open("/sys/class/gpio/unexport", O_WRONLY);
-    if (fd < 0) {
-        ret = -1;
-        goto done;
-    }
-    
+    if (fd < 0)
+        return -1;
+
     bytes_written = snprintf(buffer, 3, "%d", pin);
-    if (write(fd, buffer, bytes_written) < 0) {
-        ret = -1;
-        goto done;
-    }
-
-done:
+    write_sts = write(fd, buffer, bytes_written);
     close(fd);
-    return ret;
-}
 
-int gpio_set_direction(enum gpio_pin pin, enum gpio_dir dir)
-{
-    // Largest possible value for the gpio direction path.
-    char path[35];
-    
-    int ret;
-    int fd;
-
-    snprintf(path, 35, "/sys/class/gpio/gpio%d/direction", pin);
-    
-    fd = open(path, O_WRONLY);
-    if(fd < 0) {
+    if (write_sts < 0)
         return -1;
-    }
-    
-    if(dir == GPIO_IN) {
-        ret = write(fd, "in", 2);
-    } else {
-        ret = write(fd, "out", 3);
-    }
-
-    close(fd);
-    return ret;
+    else
+        return 0;
 }
 
-int gpio_write(enum gpio_pin pin, enum gpio_value val)
+int gpio_write(struct gpio_pin* pin, enum gpio_value val)
 {
-    // Largest possible value for the gpio direction path.
-    char path[30];
-    
-    int ret;
-    int fd;
+    const char* lo = "0";
+    const char* hi = "1";
 
-    snprintf(path, 30, "/sys/class/gpio/gpio%d/value", pin);
-    
-    fd = open(path, O_WRONLY);
-    if(fd < 0) {
-        return -1;
-    }
-    
-    if (val == GPIO_OFF) {
-        ret = write(fd, "0", 1);
-    } else {
-        ret = write(fd, "1", 1);
-    }
+    const char* val_str;
 
-    close(fd);
-    return ret;
+    if (val == GPIO_LO)
+        val_str = lo;
+    else
+        val_str = hi;
+
+    return write(pin->fd, val_str, 1);
 }
 
-int gpio_read(enum gpio_pin pin)
+int gpio_read(struct gpio_pin* pin)
 {
-    // Largest possible value for the gpio direction path.
-    char path[30];
-    
-    int ret;
     char value_string[3];
-    int fd;
 
-    snprintf(path, 30, "/sys/class/gpio/gpio%d/value", pin);
-    
-    fd = open(path, O_RDONLY);
-    if(fd < 0) {
+    if(read(pin->fd, value_string, 3) < 0)
         return -1;
-    }
 
-    if(read(fd, value_string, 3) < 0) {
-        ret = -1;
-        goto done;
-    }
-
-    ret = atoi(value_string);
-
-done:
-    close(fd);
-    return ret;
+    return atoi(value_string);
 }
+
