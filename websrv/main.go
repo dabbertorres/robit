@@ -10,45 +10,36 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/dabbertorres/robit/camera"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
 var (
-	// ~30 frames per second
-	frameDelay        = 33 * time.Millisecond
 	alreadyControlled = false
 	controlledLock    sync.Mutex
 )
 
 func main() {
 	var (
-		viewers   []chan<- image.Image
-		newViewer chan chan<- image.Image
-		byeViewer chan chan<- image.Image
-	)
-
-	cam, err := camera.OpenCamera("/dev/video0")
-	if err != nil {
-		log.Println(err)
-	} else {
-		defer cam.Close()
-
-		viewers = make([]chan<- image.Image, 0, 64)
+		viewers   = make([]chan<- image.Image, 0, 64)
 		newViewer = make(chan chan<- image.Image, 8)
 		byeViewer = make(chan chan<- image.Image, 8)
+	)
+
+	_, err := exec.Lookup("ffmpeg")
+	if err != nil {
+		panic(err)
 	}
 
 	// TODO open (socket?) video stream locally, then use to provide bytes to requests to /watch/{type}
 
 	router := mux.NewRouter()
 	router.Path("/watch").Methods("GET").HandlerFunc(watchHandler)
-	router.Path("/watch/mjpeg").Methods("GET").HandlerFunc(watchMjpegImgHandler(newViewer, byeViewer))
 	router.Path("/control").Methods("GET").HandlerFunc(controlRequestHandler)
 	router.Path("/control/run").Methods("GET").HandlerFunc(controlRunHandler)
 	router.Path("/control/ws").Methods("GET").HandlerFunc(controlSocketHandler)
@@ -68,17 +59,6 @@ func main() {
 		}
 	}()
 
-	// let's aim for a fixed update rate - helps us keep from doing extra work
-	frameTick := time.NewTicker(frameDelay)
-	defer frameTick.Stop()
-
-	cancel, errC, err := cam.Start()
-	if err != nil {
-		log.Println("Error starting camera streaming:", err)
-		return
-	}
-	defer cancel()
-
 	for {
 		select {
 		case nv := <-newViewer:
@@ -94,13 +74,7 @@ func main() {
 					break
 				}
 			}
-
-		case <-frameTick.C:
 		}
-	}
-
-	if err, ok := <-errC; ok && err != nil {
-		log.Println("Error from camera capture:", err)
 	}
 }
 
@@ -127,13 +101,13 @@ var watchPage = Page{
 			},
 		},
 		Footer: []Element{
-		/*{
-			Type: "a",
-			Attributes: []Attribute{
-				{"href", "/control"},
-			},
-			Content: "Take control?",
-		},*/
+			/*{
+				Type: "a",
+				Attributes: []Attribute{
+					{"href", "/control"},
+				},
+				Content: "Take control?",
+			},*/
 		},
 	},
 }
@@ -143,57 +117,6 @@ func watchHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("Error building /watch:", err)
 		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-func watchMjpegImgHandler(add, bye chan chan<- image.Image) http.HandlerFunc {
-	if add == nil || bye == nil {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
-	}
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		multiW := multipart.NewWriter(w)
-		multiW.SetBoundary("--boundary")
-		defer multiW.Close()
-
-		w.Header().Add("Connection", "close")
-		w.Header().Add("Cache-Control", "no-store, no-cache")
-		w.Header().Add("Content-Type", fmt.Sprintf("multipart/x-mixed-replace;boundary=%s", multiW.Boundary()))
-		w.WriteHeader(http.StatusOK)
-
-		closing := w.(http.CloseNotifier).CloseNotify()
-
-		frameC := make(chan image.Image, 2)
-		add <- frameC
-
-		for {
-			select {
-			case <-closing:
-				bye <- frameC
-				return
-
-			case f := <-frameC:
-				buf := bytes.Buffer{}
-
-				err := jpeg.Encode(&buf, f, nil)
-				if err != nil {
-					log.Println("jpeg.Encode() error:", err)
-				}
-
-				partH := textproto.MIMEHeader{}
-				partH.Add("Content-Type", "image/jpeg")
-
-				partW, err := multiW.CreatePart(partH)
-				if err != nil {
-					log.Println("mjpeg handler: multipart.Writer.CreatePart():", err)
-					continue
-				}
-
-				partW.Write(buf.Bytes())
-			}
-		}
 	}
 }
 
