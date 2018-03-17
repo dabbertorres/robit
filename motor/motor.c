@@ -50,20 +50,23 @@ fail:
     return NULL;
 }
 
-void motor_free_group(struct motor_group* mg)
+uint64_t motor_free_group(struct motor_group* mg)
 {
+    uint64_t res = 0;
+
     struct motor* m = &mg->front_left;
 
     for(int i = 0; i < 4; ++i, ++m)
     {
-        gpio_write(m->hi, GPIO_LO);
-        gpio_write(m->lo, GPIO_LO);
+        res |= gpio_write(m->hi, GPIO_LO) * -1 << (8 * i);
+        res |= gpio_write(m->lo, GPIO_LO) * -1 << (8 * (i + 1));
 
-        gpio_unregister_pin(m->hi);
-        gpio_unregister_pin(m->lo);
+        res |= gpio_unregister_pin(m->hi) * -1 << (8 * i + 7);
+        res |= gpio_unregister_pin(m->lo) * -1 << (8 * (i + 1) + 7);
     }
 
     free(mg);
+    return res;
 }
 
 int motor_set_motor(struct motor* m, int pin_hi, int pin_lo)

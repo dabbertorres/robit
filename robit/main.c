@@ -62,7 +62,12 @@ int main()
         }
     }
 
-    motor_free_group(robit);
+    uint64_t freeRes = motor_free_group(robit);
+
+    for(int i = 0; i < 8; ++i)
+    {
+        printf("pin #%d result(write: %llu, free: %llu)\n", i, (freeRes >> (8 * i) & 0x01), (freeRes >> (8 * i + 7) & 0x01));
+    }
 
     return 0;
 }
