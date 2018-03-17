@@ -15,7 +15,7 @@
 
 int main()
 {
-    int pins[] = { 12, 16, 20, 21, 6, 13, 19, 26 };
+    int pins[] = { 19, 26, 6, 13, 20, 21, 12, 16 };
 
     struct motor_group* robit = motor_make_group(pins);
     if(robit == NULL)
@@ -46,11 +46,11 @@ int main()
                 break;
 
             case RIGHT_KEY:
-                motor_rotate_right(robit);
+                motor_rotate_clockwise(robit);
                 break;
 
             case LEFT_KEY:
-                motor_rotate_left(robit);
+                motor_rotate_counterwise(robit);
                 break;
 
             case EXIT_KEY:

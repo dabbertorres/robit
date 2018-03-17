@@ -11,6 +11,6 @@ uint64_t motor_free_group(struct motor_group* mg);
 int motor_forward(struct motor_group* mg);
 int motor_stop(struct motor_group* mg);
 int motor_reverse(struct motor_group* mg);
-int motor_rotate_right(struct motor_group* mg);
-int motor_rotate_left(struct motor_group* mg);
+int motor_rotate_clockwise(struct motor_group* mg);
+int motor_rotate_counterwise(struct motor_group* mg);
 

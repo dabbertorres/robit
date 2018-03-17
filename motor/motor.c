@@ -6,8 +6,8 @@
 
 struct motor
 {
-    gpio_pin hi;
-    gpio_pin lo;
+    gpio_pin fwd;
+    gpio_pin back;
 };
 
 struct motor_group
@@ -18,7 +18,7 @@ struct motor_group
     struct motor back_right;
 };
 
-int motor_set_motor(struct motor* m, int pin_hi, int pin_lo);
+int motor_set_motor(struct motor* m, int pin_fwd, int pin_back);
 
 struct motor_group* motor_make_group(int* pins)
 {
@@ -41,8 +41,8 @@ fail:
     do
     {
         --ms;
-        gpio_unregister_pin(ms->hi);
-        gpio_unregister_pin(ms->lo);
+        gpio_unregister_pin(ms->fwd);
+        gpio_unregister_pin(ms->back);
     }
     while(ms != &mg->front_left);
 
@@ -58,45 +58,45 @@ uint64_t motor_free_group(struct motor_group* mg)
 
     for(int i = 0; i < 4; ++i, ++m)
     {
-        res |= gpio_write(m->hi, GPIO_LO) * -1 << (8 * i);
-        res |= gpio_write(m->lo, GPIO_LO) * -1 << (8 * (i + 1));
+        res |= gpio_write(m->fwd, GPIO_LO) * -1 << (8 * i);
+        res |= gpio_write(m->back, GPIO_LO) * -1 << (8 * (i + 1));
 
-        res |= gpio_unregister_pin(m->hi) * -1 << (8 * i + 7);
-        res |= gpio_unregister_pin(m->lo) * -1 << (8 * (i + 1) + 7);
+        res |= gpio_unregister_pin(m->fwd) * -1 << (8 * i + 7);
+        res |= gpio_unregister_pin(m->back) * -1 << (8 * (i + 1) + 7);
     }
 
     free(mg);
     return res;
 }
 
-int motor_set_motor(struct motor* m, int pin_hi, int pin_lo)
+int motor_set_motor(struct motor* m, int pin_fwd, int pin_back)
 {
     int res;
 
-    res = gpio_register_pin(pin_hi, GPIO_W, &m->hi);
+    res = gpio_register_pin(pin_fwd, GPIO_W, &m->fwd);
     if(res < 0)
         return res;
 
-    res = gpio_register_pin(pin_lo, GPIO_W, &m->lo);
+    res = gpio_register_pin(pin_back, GPIO_W, &m->back);
     if(res < 0)
-        gpio_unregister_pin(m->hi);
+        gpio_unregister_pin(m->fwd);
 
     return res;
 }
 
 int motor_forward(struct motor_group* mg)
 {
-    gpio_write(mg->front_left.hi, GPIO_HI);
-    gpio_write(mg->front_left.lo, GPIO_LO);
+    gpio_write(mg->front_left.fwd, GPIO_HI);
+    gpio_write(mg->front_left.back, GPIO_LO);
 
-    gpio_write(mg->front_right.hi, GPIO_HI);
-    gpio_write(mg->front_right.lo, GPIO_LO);
+    gpio_write(mg->front_right.fwd, GPIO_HI);
+    gpio_write(mg->front_right.back, GPIO_LO);
 
-    gpio_write(mg->back_left.hi, GPIO_HI);
-    gpio_write(mg->back_left.lo, GPIO_LO);
+    gpio_write(mg->back_left.fwd, GPIO_HI);
+    gpio_write(mg->back_left.back, GPIO_LO);
 
-    gpio_write(mg->back_right.hi, GPIO_HI);
-    gpio_write(mg->back_right.lo, GPIO_LO);
+    gpio_write(mg->back_right.fwd, GPIO_HI);
+    gpio_write(mg->back_right.back, GPIO_LO);
 
     // TODO errors
     return 0;
@@ -104,17 +104,17 @@ int motor_forward(struct motor_group* mg)
 
 int motor_stop(struct motor_group* mg)
 {
-    gpio_write(mg->front_left.hi, GPIO_LO);
-    gpio_write(mg->front_left.lo, GPIO_LO);
+    gpio_write(mg->front_left.fwd, GPIO_LO);
+    gpio_write(mg->front_left.back, GPIO_LO);
 
-    gpio_write(mg->front_right.hi, GPIO_LO);
-    gpio_write(mg->front_right.lo, GPIO_LO);
+    gpio_write(mg->front_right.fwd, GPIO_LO);
+    gpio_write(mg->front_right.back, GPIO_LO);
 
-    gpio_write(mg->back_left.hi, GPIO_LO);
-    gpio_write(mg->back_left.lo, GPIO_LO);
+    gpio_write(mg->back_left.fwd, GPIO_LO);
+    gpio_write(mg->back_left.back, GPIO_LO);
 
-    gpio_write(mg->back_right.hi, GPIO_LO);
-    gpio_write(mg->back_right.lo, GPIO_LO);
+    gpio_write(mg->back_right.fwd, GPIO_LO);
+    gpio_write(mg->back_right.back, GPIO_LO);
 
     // TODO errors
     return 0;
@@ -123,52 +123,54 @@ int motor_stop(struct motor_group* mg)
 
 int motor_reverse(struct motor_group* mg)
 {
-    gpio_write(mg->front_left.hi, GPIO_LO);
-    gpio_write(mg->front_left.lo, GPIO_HI);
+    gpio_write(mg->front_left.fwd, GPIO_LO);
+    gpio_write(mg->front_left.back, GPIO_HI);
 
-    gpio_write(mg->front_right.hi, GPIO_LO);
-    gpio_write(mg->front_right.lo, GPIO_HI);
+    gpio_write(mg->front_right.fwd, GPIO_LO);
+    gpio_write(mg->front_right.back, GPIO_HI);
 
-    gpio_write(mg->back_left.hi, GPIO_LO);
-    gpio_write(mg->back_left.lo, GPIO_HI);
+    gpio_write(mg->back_left.fwd, GPIO_LO);
+    gpio_write(mg->back_left.back, GPIO_HI);
 
-    gpio_write(mg->back_right.hi, GPIO_LO);
-    gpio_write(mg->back_right.lo, GPIO_HI);
+    gpio_write(mg->back_right.fwd, GPIO_LO);
+    gpio_write(mg->back_right.back, GPIO_HI);
 
     // TODO errors
     return 0;
 }
 
-int motor_rotate_right(struct motor_group* mg)
+// for turning, turn off the side we want to turn towards, turn on the opposite side
+
+int motor_rotate_clockwise(struct motor_group* mg)
 {
-    gpio_write(mg->front_left.hi, GPIO_HI);
-    gpio_write(mg->front_left.lo, GPIO_LO);
+    gpio_write(mg->front_left.fwd, GPIO_HI);
+    gpio_write(mg->front_left.back, GPIO_LO);
 
-    gpio_write(mg->front_right.hi, GPIO_LO);
-    gpio_write(mg->front_right.lo, GPIO_HI);
+    gpio_write(mg->front_right.fwd, GPIO_LO);
+    gpio_write(mg->front_right.back, GPIO_LO);
 
-    gpio_write(mg->back_left.hi, GPIO_HI);
-    gpio_write(mg->back_left.lo, GPIO_LO);
+    gpio_write(mg->back_left.fwd, GPIO_HI);
+    gpio_write(mg->back_left.back, GPIO_LO);
 
-    gpio_write(mg->back_right.hi, GPIO_LO);
-    gpio_write(mg->back_right.lo, GPIO_HI);
+    gpio_write(mg->back_right.fwd, GPIO_LO);
+    gpio_write(mg->back_right.back, GPIO_LO);
 
     return 0;
 }
 
-int motor_rotate_left(struct motor_group* mg)
+int motor_rotate_counterwise(struct motor_group* mg)
 {
-    gpio_write(mg->front_left.hi, GPIO_LO);
-    gpio_write(mg->front_left.lo, GPIO_HI);
+    gpio_write(mg->front_left.fwd, GPIO_LO);
+    gpio_write(mg->front_left.back, GPIO_LO);
 
-    gpio_write(mg->front_right.hi, GPIO_HI);
-    gpio_write(mg->front_right.lo, GPIO_LO);
+    gpio_write(mg->front_right.fwd, GPIO_HI);
+    gpio_write(mg->front_right.back, GPIO_LO);
 
-    gpio_write(mg->back_left.hi, GPIO_LO);
-    gpio_write(mg->back_left.lo, GPIO_HI);
+    gpio_write(mg->back_left.fwd, GPIO_LO);
+    gpio_write(mg->back_left.back, GPIO_LO);
 
-    gpio_write(mg->back_right.hi, GPIO_HI);
-    gpio_write(mg->back_right.lo, GPIO_LO);
+    gpio_write(mg->back_right.fwd, GPIO_HI);
+    gpio_write(mg->back_right.back, GPIO_LO);
 
     return 0;
 }
