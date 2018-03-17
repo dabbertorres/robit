@@ -26,7 +26,7 @@ struct motor_group* motor_make_group(int* pins)
 
     struct motor_group* mg = malloc(sizeof(struct motor_group));
 
-    struct motor* ms = &mg->front_right;
+    struct motor* ms = &mg->front_left;
 
     for(int i = 0; i < 4; ++i)
     {
@@ -44,7 +44,7 @@ fail:
         gpio_unregister_pin(ms->hi);
         gpio_unregister_pin(ms->lo);
     }
-    while(ms != &mg->front_right);
+    while(ms != &mg->front_left);
 
     free(mg);
     return NULL;
@@ -52,9 +52,9 @@ fail:
 
 void motor_free_group(struct motor_group* mg)
 {
-    struct motor* m = &mg->front_right;
+    struct motor* m = &mg->front_left;
 
-    for(int i = 0; i < 4; ++i)
+    for(int i = 0; i < 4; ++i, ++m)
     {
         gpio_write(m->hi, GPIO_LO);
         gpio_write(m->lo, GPIO_LO);
