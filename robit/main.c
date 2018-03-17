@@ -46,11 +46,11 @@ int main()
                 break;
 
             case RIGHT_KEY:
-                motor_reverse(robit);
+                motor_rotate_right(robit);
                 break;
 
             case LEFT_KEY:
-                motor_reverse(robit);
+                motor_rotate_left(robit);
                 break;
 
             case EXIT_KEY:
