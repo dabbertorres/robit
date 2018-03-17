@@ -14,7 +14,7 @@ $(OBJ_DIR)/%.o: %.c
 $(OBJS): | $(OBJ_DIR)
 
 $(OBJ_DIR):
-	mkdir $(OBJ_DIR)
+	@mkdir $(OBJ_DIR)
 
 clean:
 	@rm -rf $(OBJ_DIR)

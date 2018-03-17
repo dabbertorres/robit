@@ -5,12 +5,7 @@
 
 #include "gpio.h"
 
-struct gpio_pin
-{
-    int fd;
-};
-
-int gpio_register_pin(int pin_num, enum gpio_direction dir, struct gpio_pin* pin)
+int gpio_register_pin(int pin_num, enum gpio_direction dir, gpio_pin* pin)
 {
     // Largest possible length of a string we're dealing with
     char buffer[35];
@@ -55,22 +50,22 @@ int gpio_register_pin(int pin_num, enum gpio_direction dir, struct gpio_pin* pin
     /* now let's grab the place we're reading/writing to/from */
 
     snprintf(buffer, 30, "/sys/class/gpio/gpio%d/value", pin_num);
-    pin->fd = open(buffer, file_mode);
+    *pin = open(buffer, file_mode);
 
-    if(pin->fd < 0)
+    if(*pin < 0)
         return -1;
     else
         return 0;
 }
 
-int gpio_unregister_pin(struct gpio_pin* pin)
+int gpio_unregister_pin(gpio_pin pin)
 {
     char buffer[3];
     int bytes_written;
     int fd;
     int write_sts;
 
-    close(pin->fd);
+    close(pin);
 
     fd = open("/sys/class/gpio/unexport", O_WRONLY);
     if (fd < 0)
@@ -86,7 +81,7 @@ int gpio_unregister_pin(struct gpio_pin* pin)
         return 0;
 }
 
-int gpio_write(struct gpio_pin* pin, enum gpio_value val)
+int gpio_write(gpio_pin pin, enum gpio_value val)
 {
     const char* lo = "0";
     const char* hi = "1";
@@ -98,14 +93,14 @@ int gpio_write(struct gpio_pin* pin, enum gpio_value val)
     else
         val_str = hi;
 
-    return write(pin->fd, val_str, 1);
+    return write(pin, val_str, 1);
 }
 
-int gpio_read(struct gpio_pin* pin)
+int gpio_read(gpio_pin pin)
 {
     char value_string[3];
 
-    if(read(pin->fd, value_string, 3) < 0)
+    if(read(pin, value_string, 3) < 0)
         return -1;
 
     return atoi(value_string);

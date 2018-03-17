@@ -1,6 +1,6 @@
 #pragma once
 
-struct gpio_pin;
+typedef int gpio_pin;
 
 enum gpio_direction
 {
@@ -14,8 +14,8 @@ enum gpio_value
     GPIO_HI = 1,
 };
 
-int gpio_register_pin(int pin_num, enum gpio_direction dir, struct gpio_pin* pin);
-int gpio_unregister_pin(struct gpio_pin* pin);
-int gpio_write(struct gpio_pin* pin, enum gpio_value val);
-int gpio_read(struct gpio_pin* pin);
+int gpio_register_pin(int pin_num, enum gpio_direction dir, gpio_pin* pin);
+int gpio_unregister_pin(gpio_pin pin);
+int gpio_write(gpio_pin pin, enum gpio_value val);
+int gpio_read(gpio_pin pin);
 
