@@ -100,6 +100,8 @@ int gpio_read(gpio_pin pin)
 {
     char value_string[3];
 
+    lseek(pin, 0, SEEK_SET);
+
     if(read(pin, value_string, 3) < 0)
         return -1;
 
