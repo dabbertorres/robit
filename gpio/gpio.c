@@ -61,17 +61,31 @@ int gpio_register_pin(int pin_num, enum gpio_direction dir, gpio_pin* pin)
 int gpio_unregister_pin(gpio_pin pin)
 {
     char buffer[3];
+    char file_name_buffer[4096];
+    char conversion_buffer[35];
+    int pin_number;
     int bytes_written;
     int fd;
     int write_sts;
+    
+    
+    /* recover the pin number from the open file descriptor symlink */
 
+    bytes_written = snprintf(conversion_buffer, 35, "/proc/self/fd/%d", pin);
+    bytes_written = readlink(conversion_buffer, file_name_buffer, 4096);
+    bytes_written = sscanf(file_name_buffer, "%*[^g]gpio/gpio/gpio%d%", &pin_number);
+    if (!bytes_written) {
+	printf("error calculating pin number\n");
+	return;
+    }
+    
     close(pin);
 
     fd = open("/sys/class/gpio/unexport", O_WRONLY);
     if (fd < 0)
         return -1;
 
-    bytes_written = snprintf(buffer, 3, "%d", pin);
+    bytes_written = snprintf(buffer, 3, "%d", pin_number);
     write_sts = write(fd, buffer, bytes_written);
     close(fd);
 
@@ -98,13 +112,10 @@ int gpio_write(gpio_pin pin, enum gpio_value val)
 
 int gpio_read(gpio_pin pin)
 {
-    char value_string[3];
-
+    char value[3];
     lseek(pin, 0, SEEK_SET);
-
-    if(read(pin, value_string, 3) < 0)
+    if(read(pin, value, 3) < 0)
         return -1;
-
-    return atoi(value_string);
+    return atoi(value);
 }
 
