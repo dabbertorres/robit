@@ -10,14 +10,11 @@ DEPS := -l:gpio.a -l:motor.a
 $(OUT_DIR)/robit: $(OBJS)
 	$(CC) -o $@ $^ -L$(OUT_DIR) $(DEPS)
 
-$(OBJ_DIR)/%.o: %.c
+$(OBJS): $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 	$(CC) -o $@ $(CFLAGS) -c $<
-
-$(OBJS): | $(OBJ_DIR)
 
 $(OBJ_DIR):
 	@mkdir $(OBJ_DIR)
 
 clean:
 	@rm -rf $(OBJ_DIR)
-

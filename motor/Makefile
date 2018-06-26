@@ -1,22 +1,19 @@
 SRC := motor.c
+DEP := $(OUT_DIR)/gpio.a
 
 OBJ_DIR := obj
 OBJS    := $(addprefix $(OBJ_DIR)/,$(SRC:%.c=%.o))
-DEPS	:= $(OUT_DIR)/gpio.a
 
 .PHONY: clean
 
 $(OUT_DIR)/motor.a: $(OBJS)
-	$(AR) rcs $@ $^ $(DEPS)
+	$(AR) rcs $@ $^ $(DEP)
 
-$(OBJ_DIR)/%.o: %.c
-	$(CC) -o $@ $(CFLAGS) -c $<
-
-$(OBJS): | $(OBJ_DIR)
+$(OBJS): $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
+	$(CC) -o $@ -c $(CFLAGS) $<
 
 $(OBJ_DIR):
-	@mkdir $(OBJ_DIR)
+	@mkdir -p $(OBJ_DIR)
 
 clean:
 	@rm -rf $(OBJ_DIR)
-
