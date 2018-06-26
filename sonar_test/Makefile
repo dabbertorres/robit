@@ -3,11 +3,11 @@ SRC := main.c
 OBJ_DIR := obj
 OBJS    := $(addprefix $(OBJ_DIR)/,$(SRC:%.c=%.o))
 
-DEPS := motor.a gpio.a
+DEPS := sonar.a gpio.a
 
 .PHONY: clean
 
-$(OUT_DIR)/robit: $(OBJS) $(addprefix $(OUT_DIR)/,$(DEPS))
+$(OUT_DIR)/sonar_test: $(OBJS) $(addprefix $(OUT_DIR)/,$(DEPS))
 	$(CC) -o $@ $^ -L$(OUT_DIR) $(addprefix -l:,$(DEPS))
 
 $(OBJS): $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)

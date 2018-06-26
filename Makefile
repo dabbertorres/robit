@@ -23,15 +23,16 @@ EXEC = $(DOCKER) exec $(CONTAINER) bash -c 'export CC=$(CC); \
 											export OUT_DIR=$(OUT_DIR); \
 											$(1)'
 
-.PHONY: all gpio motor sonar robit camera websrv camera.test websrv.test test clean start stop
+.PHONY: all gpio motor sonar robit camera websrv camera.test websrv.test sonar_test test clean start stop
 
 all: gpio motor sonar robit camera websrv
-test: camera.test websrv.test
+test: camera.test websrv.test sonar_test
 
 camera:      $(OUT_DIR_HOST)/camera
 websrv:      $(OUT_DIR_HOST)/websrv
 camera.test: $(OUT_DIR_HOST)/camera.test
 websrv.test: $(OUT_DIR_HOST)/websrv.test
+sonar_test:  $(OUT_DIR_HOST)/sonar_test
 
 gpio: | $(OUT_DIR_HOST) start
 	$(call EXEC,make -j$(nproc) -C gpio/)
@@ -56,6 +57,9 @@ $(OUT_DIR_HOST)/camera.test: | $(OUT_DIR_HOST)
 
 $(OUT_DIR_HOST)/websrv.test: | $(OUT_DIR_HOST)
 	$(GOFLAGS) go test -c -o $(OUT_DIR_HOST)/websrv.test robit/websrv
+
+$(OUT_DIR_HOST)/sonar_test: sonar | $(OUT_DIR_HOST) start
+	$(call EXEC,make -j$(nproc) -C sonar_test/)
 
 $(OUT_DIR_HOST):
 	@mkdir -p $@
