@@ -17,11 +17,11 @@ SRC_DIR   ?= /gopath/src/robit
 OUT_DIR_HOST ?= build
 OUT_DIR      := $(SRC_DIR)/$(OUT_DIR_HOST)
 
-EXEC = $(DOCKER) exec $(CONTAINER) bash -c 'export CC=$(CC); \
-											export AR=$(AR); \
-											export CFLAGS="$(CFLAGS)"; \
-											export OUT_DIR=$(OUT_DIR); \
-											$(1)'
+EXEC = $(DOCKER) exec -w "$(SRC_DIR)" $(CONTAINER) bash -c 'export CC=$(CC); \
+															export AR=$(AR); \
+															export CFLAGS="$(CFLAGS)"; \
+															export OUT_DIR=$(OUT_DIR); \
+															$(1)'
 
 .PHONY: all gpio motor sonar robit camera websrv camera.test websrv.test sonar_test test clean start stop
 
@@ -73,8 +73,10 @@ clean:
 
 # start container if it's not already running
 start:
-	@$(DOCKER) container inspect $(CONTAINER) > /dev/null 2> /dev/null || \
-		$(DOCKER) run -td -v "$(PWD)":"$(SRC_DIR)" -w "$(SRC_DIR)" --name $(CONTAINER) $(IMAGE)
+	$(DOCKER) container inspect $(CONTAINER) > /dev/null 2>&1 || \
+		$(DOCKER) run -td -v "${CURDIR}":"$(SRC_DIR)" --name $(CONTAINER) $(IMAGE)
 
 stop:
 	@$(DOCKER) stop $(CONTAINER) 2> /dev/null
+	@$(DOCKER) container prune -f
+
