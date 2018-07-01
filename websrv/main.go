@@ -1,14 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"fmt"
 	"image"
-	"image/jpeg"
 	"log"
-	"mime/multipart"
 	"net/http"
-	"net/textproto"
 	"os"
 	"os/exec"
 	"strings"
@@ -31,7 +26,7 @@ func main() {
 		byeViewer = make(chan chan<- image.Image, 8)
 	)
 
-	_, err := exec.Lookup("ffmpeg")
+	_, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		panic(err)
 	}

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"text/template"
 	"io"
+	"text/template"
 )
 
 type Attribute struct {
