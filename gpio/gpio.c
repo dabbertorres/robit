@@ -60,9 +60,9 @@ int gpio_register_pin(int pin_num, enum gpio_direction dir, gpio_pin* pin)
 
 int gpio_unregister_pin(gpio_pin pin)
 {
-    char buffer[3];
-    char file_name_buffer[4096];
-    char conversion_buffer[35];
+    char buffer[3] = {0};
+    char file_name_buffer[4096] = {0};
+    char conversion_buffer[35] = {0};
     int pin_number;
     int bytes_written;
     int fd;
@@ -70,9 +70,9 @@ int gpio_unregister_pin(gpio_pin pin)
 
     /* recover the pin number from the open file descriptor symlink */
 
-    bytes_written = snprintf(conversion_buffer, 35, "/proc/self/fd/%d", pin);
-    bytes_written = readlink(conversion_buffer, file_name_buffer, 4096);
-    bytes_written = sscanf(file_name_buffer, "%*[^g]gpio/gpio/gpio%d", &pin_number);
+    bytes_written = snprintf(conversion_buffer, sizeof(conversion_buffer), "/proc/self/fd/%d", pin);
+    bytes_written = readlink(conversion_buffer, file_name_buffer, sizeof(file_name_buffer));
+    bytes_written = sscanf(file_name_buffer, "/sys/devices/platform/soc/%*x.gpio/gpiochip%*d/gpio/gpio%d/value", &pin_number);
     if (!bytes_written) {
         printf("error calculating pin number\n");
         return -1;
@@ -84,7 +84,7 @@ int gpio_unregister_pin(gpio_pin pin)
     if (fd < 0)
         return -1;
 
-    bytes_written = snprintf(buffer, 3, "%d", pin_number);
+    bytes_written = snprintf(buffer, sizeof(buffer), "%d", pin_number);
     write_sts = write(fd, buffer, bytes_written);
     close(fd);
 
