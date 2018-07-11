@@ -20,7 +20,7 @@ struct motor_group
 
 int motor_set_motor(struct motor* m, int pin_fwd, int pin_back);
 
-struct motor_group* motor_make_group(int* pins)
+struct motor_group* motor_make_group(const int* pins)
 {
     int res;
 
