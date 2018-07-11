@@ -25,7 +25,7 @@ struct sonar
     int do_measure;
 };
 
-static void sigterm_handler(int signum)
+static void sig_handler(int signum)
 {
     pthread_exit(NULL);
 }
@@ -37,14 +37,20 @@ static pthread_cond_t sync_cond;
 
 void sonar_init()
 {
-    signal(SIGUSR1, sigterm_handler);
+    struct sigaction sa;
+    sa.sa_handler = sig_handler;
+    sigaction(SIGUSR1, &sa, NULL);
+
     pthread_mutex_init(&sync_mutex, NULL);
     pthread_cond_init(&sync_cond, NULL);
 }
 
 void sonar_deinit()
 {
-    signal(SIGUSR1, NULL);
+    struct sigaction sa;
+    sa.sa_handler = SIG_DFL;
+    sigaction(SIGUSR1, &sa, NULL);
+
     pthread_mutex_destroy(&sync_mutex);
     pthread_cond_destroy(&sync_cond);
 }
