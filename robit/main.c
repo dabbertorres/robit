@@ -15,7 +15,7 @@
 
 int main()
 {
-    int pins[] = { 19, 26, 6, 13, 20, 21, 12, 16 };
+    int pins[] = { 19, 26, 6, 13, 20, 21, 12, 7 };
 
     struct motor_group* robit = motor_make_group(pins);
     if(robit == NULL)
