@@ -1,0 +1,41 @@
+Legend:
+M[FB][LR][+-] = Motor, Front/Back, Left/Right, Forward/Reverse
+p[0-9]{1,2}   = Pin Number
+
+=============================================
+    a   b   c   d   e   f   g   h   i   j
+1                                       +
+                                        -
+
+
+
+6
+
+
+
+                                    p26 MFL-
+11                                  p19 MFL+
+
+
+                                    p13 MFR-
+                                    p 6 MFR+
+16
+
+                                    p21 MBL-
+                                    p20 MBL+
+
+21
+                                    p 7 MBR-
+                                    p12 MBR+
+
+
+26
+
+
+
+
+=============================================
+Relay:
+    White is Ground
+    Black is Vdd
+
