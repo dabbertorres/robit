@@ -74,7 +74,7 @@ int gpio_unregister_pin(gpio_pin pin)
     bytes_written = snprintf(conversion_buffer, sizeof(conversion_buffer), "/proc/self/fd/%d", pin);
     bytes_written = readlink(conversion_buffer, file_name_buffer, sizeof(file_name_buffer));
     
-    char* end = strrchr(file_name_buffer, "/");
+    char* end = strrchr(file_name_buffer, '/');
     end = '\0';
     end = strrchr(file_name_buffer, "/");
     bytes_written = sscanf(end, "/gpio%d", &pin_number);
