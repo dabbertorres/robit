@@ -7,7 +7,7 @@ DEPS := motor.a gpio.a
 
 .PHONY: clean
 
-$(OUT_DIR)/robit: $(OBJS) $(addprefix $(OUT_DIR)/,$(DEPS))
+$(OUT_DIR)/robit: $(OBJS)
 	$(CC) -o $@ $^ -L$(OUT_DIR) $(addprefix -l:,$(DEPS))
 
 $(OBJS): $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)

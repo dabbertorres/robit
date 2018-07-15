@@ -5,7 +5,7 @@
 struct motor_group;
 
 // pins must be an array of length 8 - it is undefined behavior otherwise
-struct motor_group* motor_make_group(int* pins);
+struct motor_group* motor_make_group(const int* pins);
 uint64_t motor_free_group(struct motor_group* mg);
 
 int motor_forward(struct motor_group* mg);

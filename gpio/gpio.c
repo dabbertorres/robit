@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -61,7 +62,7 @@ int gpio_register_pin(int pin_num, enum gpio_direction dir, gpio_pin* pin)
 int gpio_unregister_pin(gpio_pin pin)
 {
     char buffer[3] = {0};
-    char file_name_buffer[4096] = {0};
+    char file_name_buffer[128] = {0};
     char conversion_buffer[35] = {0};
     int pin_number;
     int bytes_written;
@@ -72,11 +73,14 @@ int gpio_unregister_pin(gpio_pin pin)
 
     bytes_written = snprintf(conversion_buffer, sizeof(conversion_buffer), "/proc/self/fd/%d", pin);
     bytes_written = readlink(conversion_buffer, file_name_buffer, sizeof(file_name_buffer));
-    bytes_written = sscanf(file_name_buffer, "/sys/devices/platform/soc/%*x.gpio/gpiochip%*d/gpio/gpio%d/value", &pin_number);
-    if (!bytes_written) {
-        printf("error calculating pin number\n");
+    
+    char* end = strrchr(file_name_buffer, "/");
+    end = '\0';
+    end = strrchr(file_name_buffer, "/");
+    bytes_written = sscanf(end, "/gpio%d", &pin_number);
+    
+    if (!bytes_written)
         return -1;
-    }
 
     close(pin);
 
