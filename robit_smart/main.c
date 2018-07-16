@@ -28,6 +28,8 @@ enum state
     STATE_STOP,
 };
 
+const char* state_string(enum state s);
+
 // size of state stack picked off the top of my head - probably PLENTY big
 enum state state[64] = { STATE_FWD };
 int curr_state = 0;
@@ -79,26 +81,34 @@ int main()
 
         sonar_get_all(sensors, sizeof(sensors) / sizeof(sensors[0]));
 
+        fprintf(stderr, "%s\n", state_string(state[curr_state]));
+        fprintf(stderr, "%6.3f\t%6.3f\t%6.3f\n", sensor_dists[LEFT], sensor_dists[CENTER], sensor_dists[RIGHT]);
+
         switch(state[curr_state])
         {
             case STATE_FWD:
                 // something in the way?
                 if (sensor_dists[CENTER] <= MIN_SENSOR_DIST)
                 {
+                    fprintf(stderr, "blocked center - ");
+
                     // can we turn to avoid?
                     if (sensor_dists[LEFT] > MIN_SENSOR_DIST)
                     {
                         state[++curr_state] = STATE_LEFT_TO_CLEAR_RIGHT;
+                        fprintf(stderr, "turning left to avoid\n");
                     }
                     else if (sensor_dists[RIGHT] > MIN_SENSOR_DIST)
                     {
                         state[++curr_state] = STATE_RIGHT_TO_CLEAR_LEFT;
+                        fprintf(stderr, "turning right to avoid\n");
                     }
                     else
                     {
                         // alright, we can't turn to avoid. back up until all sensors are clear, then do a random turn
                         state[++curr_state] = rand() % 2 == 0 ? STATE_LEFT_TO_CLEAR_RIGHT : STATE_RIGHT_TO_CLEAR_LEFT;
                         state[++curr_state] = STATE_REV_TO_CLEAR;
+                        fprintf(stderr, "backing up and then turning to avoid\n");
                     }
                 }
                 else
@@ -122,7 +132,10 @@ int main()
                     curr_state--;
                 // if something is blocking our turn, let's back up a bit before continuing (3 point turn)
                 else if (sensor_dists[LEFT] <= MIN_SENSOR_DIST)
+                {
                     state[++curr_state] = STATE_REV_TO_CLEAR;
+                    fprintf(stderr, "blocked left - reversing\n");
+                }
                 else
                     motor_rotate_counterwise(motors);
                 break;
@@ -133,14 +146,17 @@ int main()
                     curr_state--;
                 // if something is blocking our turn, let's back up a bit before continuing (3 point turn)
                 else if (sensor_dists[RIGHT] <= MIN_SENSOR_DIST)
+                {
                     state[++curr_state] = STATE_REV_TO_CLEAR;
+                    fprintf(stderr, "blocked right - reversing\n");
+                }
                 else
                     motor_rotate_clockwise(motors);
                 break;
 
             default:
                 // weird state? stop in our tracks, and try to go to a previous state
-                fprintf(stderr, "ended up in a weird state: %d - ", state[curr_state]);
+                fprintf(stderr, "ended up in a weird state: %s - ", state_string(state[curr_state]));
             case STATE_STOP:
                 fprintf(stderr, "stopping!\n");
                 motor_stop(motors);
@@ -158,6 +174,8 @@ int main()
             curr_state = STATE_STACK_SIZE - 1;
             fprintf(stderr, "stack overflow!\n");
         }
+
+        fprintf(stderr, "\n");
     }
 
     motor_free_group(motors);
@@ -168,5 +186,24 @@ int main()
     sonar_deinit();
 
     return 0;
+}
+
+const char* state_string(enum state s)
+{
+    switch (s)
+    {
+        case STATE_FWD:
+            return "STATE_FWD";
+        case STATE_REV_TO_CLEAR:
+            return "STATE_REV_TO_CLEAR";
+        case STATE_LEFT_TO_CLEAR_RIGHT:
+            return "STATE_LEFT_TO_CLEAR_RIGHT";
+        case STATE_RIGHT_TO_CLEAR_LEFT:
+            return "STATE_RIGHT_TO_CLEAR_LEFT";
+        case STATE_STOP:
+            return "STATE_STOP";
+        default:
+            return "STATE_UNKNOWN";
+    }
 }
 
