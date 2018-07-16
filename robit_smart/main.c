@@ -31,10 +31,10 @@ enum state
 // size of state stack picked off the top of my head - probably PLENTY big
 enum state state[64] = { STATE_FWD };
 int curr_state = 0;
-#define STATE_STACK_SIZE (sizeof(state) / sizeof(state[0]))
+#define STATE_STACK_SIZE (int)((sizeof(state) / sizeof(state[0])))
 
-const int sensor_pins[] = { 23, 24, 29, 30, 27, 28 };
-const int motor_pins[] = { 19, 26, 6, 13, 20, 21, 12, 16 };
+const int sensor_pins[] = { 14, 2, 15, 3, 18, 4 };
+const int motor_pins[] = { 19, 26, 6, 13, 20, 21, 12, 7 };
 
 static volatile sig_atomic_t run = 1;
 
@@ -56,7 +56,7 @@ int main()
 
     for (int i = 0; i < NUM_SENSORS; i++)
     {
-        sensors[i] = sonar_make(i * 2, i * 2 + 1, &sensor_dists[i]);
+        sensors[i] = sonar_make(sensor_pins[i * 2], sensor_pins[i * 2 + 1], &sensor_dists[i]);
         if (sensors[i] == NULL)
         {
             fprintf(stderr, "sonar #%d broken\n", i);
@@ -73,7 +73,9 @@ int main()
 
     while(run != 0)
     {
-        // TODO set a polling period - don't need to be constantly waiting on the sensors
+        // 300 millisecond (in nanoseconds)
+        struct timespec sleep_time = { .tv_sec = 0, .tv_nsec = 300 * 1000000 };
+        nanosleep(&sleep_time, NULL);
 
         sonar_get_all(sensors, sizeof(sensors) / sizeof(sensors[0]));
 
@@ -147,9 +149,15 @@ int main()
         }
 
         if (curr_state < 0)
+        {
             curr_state = 0;
+            fprintf(stderr, "stack underflow!\n");
+        }
         else if (curr_state >= STATE_STACK_SIZE)
+        {
             curr_state = STATE_STACK_SIZE - 1;
+            fprintf(stderr, "stack overflow!\n");
+        }
     }
 
     motor_free_group(motors);
