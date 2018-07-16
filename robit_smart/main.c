@@ -66,6 +66,19 @@ int main()
         }
     }
 
+    for (int i = 0; i < NUM_SENSORS; i++)
+    {
+        int trg;
+        int ech;
+        int tim;
+        sonar_test(sensors[i], &trg, &ech, &tim);
+        if (trg < 0 || ech < 0 || tim < 0)
+        {
+            fprintf(stderr, "sonar_test() failed: trigger: %d, echo: %d, time: %d\n", trg, ech, tim);
+            return 1;
+        }
+    }
+
     struct motor_group* motors = motor_make_group(motor_pins);
     if(motors == NULL)
     {
