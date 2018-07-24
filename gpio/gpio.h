@@ -14,8 +14,12 @@ enum gpio_value
     GPIO_HI = 1,
 };
 
-int gpio_register_pin(int pin_num, enum gpio_direction dir, gpio_pin* pin);
-int gpio_unregister_pin(gpio_pin pin);
-int gpio_write(gpio_pin pin, enum gpio_value val);
-int gpio_read(gpio_pin pin);
+// if successful, 0 is returned. Otherwise, returns errno
+int gpio_open();
+int gpio_close();
+
+void gpio_mode(uint8_t pin, enum gpio_direction dir);
+
+void gpio_write(uint8_t pin, enum gpio_value val);
+enum gpio_value gpio_read(uint8_t pin);
 
