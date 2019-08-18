@@ -24,8 +24,8 @@ enum gpio_value
 // gpio_map is for configuring the values of GPIO pins.
 typedef enum gpio_value gpio_map[GPIO_MAX_PINS];
 
-int gpio_init(gpio_dir_map map);
-int gpio_deinit();
+int  gpio_init(gpio_dir_map map);
+void gpio_deinit();
 
 void gpio_write(gpio_map map);
 void gpio_write_one(uint32_t pin, enum gpio_value val);

@@ -1,9 +1,11 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <termios.h>
 #include <unistd.h>
 
+#include "gpio/gpio.h"
 #include "motor/motor.h"
 
 #define FWRD_KEY 'w'
@@ -28,10 +30,20 @@ int main()
     // struct sigaction sig_act;
     // sig_act.sa_handler = signal_handler;
     // sigaction(SIGINT, &sig_act, NULL);
-    //
+
+    const int pins[] = {19, 26, 6, 13, 20, 21, 12, 7};
+
+    gpio_dir_map dir_map;
+    memset(dir_map, 0, sizeof(gpio_dir_map));
+
+    for (uint32_t i = 0; i < sizeof(pins) / sizeof(int); i++)
+        dir_map[pins[i]] = GPIO_W;
+
+    gpio_init(dir_map);
+    atexit(gpio_deinit);
 
     enable_raw_mode();
-    alloc_motor();
+    alloc_motor(pins);
 
     int run = 1;
 
@@ -92,14 +104,11 @@ void enable_raw_mode()
 
 void disable_raw_mode()
 {
-    printf("disable_raw_mode\n");
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) die("disable_raw_mode: tcsetattr");
 }
 
-void alloc_motor()
+void alloc_motor(const int* pins)
 {
-    const int pins[] = {19, 26, 6, 13, 20, 21, 12, 7};
-
     robit = motor_make_group(pins);
     if (robit == NULL) die("alloc_motor: motor_make_group");
 
@@ -108,15 +117,7 @@ void alloc_motor()
 
 void free_motor()
 {
-    printf("free_motor\n");
-    uint64_t freeRes = motor_free_group(robit);
-    for (int i = 0; i < 8; ++i)
-    {
-        uint64_t write_resp = freeRes >> (8 * i) & 0x01;
-        uint64_t free_resp  = freeRes >> (8 * i + 7) & 0x01;
-        if (write_resp != 0) printf("pin #%d write result: %llu\n", i, write_resp);
-        if (free_resp != 0) printf("pin #%d free result: %llu\n", i, free_resp);
-    }
+    motor_free_group(robit);
 }
 
 void die(const char* s)

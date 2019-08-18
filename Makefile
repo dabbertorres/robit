@@ -1,6 +1,6 @@
 CC      := rpi3-cc
 AR      := rpi3-ar
-CFLAGS  += -Wall -Wextra -O2 -I$(SRC_DIR)
+CFLAGS  += -std=c11 -Wall -Wextra -O0 -g -I$(SRC_DIR)
 GOFLAGS += GOOS=linux GOARCH=arm GOARM=7
 
 DOCKER := docker
@@ -23,9 +23,9 @@ EXEC = $(DOCKER) exec -w "$(SRC_DIR)" $(CONTAINER) bash -c 'export CC=$(CC); \
 															export OUT_DIR=$(OUT_DIR); \
 															$(1)'
 
-.PHONY: all gpio gpio_mmap motor sonar robit robit_smart camera websrv camera.test websrv.test sonar_test test clean start stop
+.PHONY: all gpio motor sonar robit robit_smart camera websrv camera.test websrv.test sonar_test test clean start stop
 
-all: gpio gpio_mmap motor sonar robit robit_smart camera websrv
+all: gpio motor sonar robit robit_smart camera websrv
 test: camera.test websrv.test sonar_test
 
 camera:      $(OUT_DIR_HOST)/camera
@@ -35,22 +35,19 @@ websrv.test: $(OUT_DIR_HOST)/websrv.test
 sonar_test:  $(OUT_DIR_HOST)/sonar_test
 
 gpio: | $(OUT_DIR_HOST) start
-	$(call EXEC,make -j$(nproc) -C $@/)
-
-gpio_mmap: | $(OUT_DIR_HOST) start
-	$(call EXEC,make -j$(nproc) -C $@/)
+	$(call EXEC,make -j$$(nproc) -C $@/)
 
 motor: gpio | $(OUT_DIR_HOST) start
-	$(call EXEC,make -j$(nproc) -C $@/)
+	$(call EXEC,make -j$$(nproc) -C $@/)
 
 sonar: gpio | $(OUT_DIR_HOST) start
-	$(call EXEC,make -j$(nproc) -C $@/)
+	$(call EXEC,make -j$$(nproc) -C $@/)
 
-robit: motor | $(OUT_DIR_HOST) start
-	$(call EXEC,make -j$(nproc) -C $@/)
+robit: gpio motor | $(OUT_DIR_HOST) start
+	$(call EXEC,make -j$$(nproc) -C $@/)
 
 robit_smart: motor sonar | $(OUT_DIR_HOST) start
-	$(call EXEC,make -j$(nproc) -C $@/)
+	$(call EXEC,make -j$$(nproc) -C $@/)
 
 $(OUT_DIR_HOST)/camera: | $(OUT_DIR_HOST)
 	$(GOFLAGS) go build -o $@ robit/camera
@@ -72,7 +69,6 @@ $(OUT_DIR_HOST):
 
 clean:
 	make -C gpio clean
-	make -C gpio_mmap clean
 	make -C motor clean
 	make -C sonar clean
 	make -C robit clean
