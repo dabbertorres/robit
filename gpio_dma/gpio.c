@@ -20,7 +20,7 @@ static volatile uint32_t* gpio_reg;
 
 int gpio_init(gpio_dir_map map)
 {
-    int fd = open("/dev/mem", O_RDWR | O_SYNC);
+    int fd = open("/dev/gpiomem", O_RDWR | O_SYNC);
     if (fd < 0) return errno;
 
     gpio_reg = (volatile uint32_t*)mmap(0, sysconf(_SC_PAGESIZE), PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO_ADDR);
@@ -42,6 +42,8 @@ int gpio_init(gpio_dir_map map)
 
 void gpio_deinit()
 {
+    for (uint32_t i = 0; i < GPIO_MAX_PINS / 10; i++)
+        *(gpio_reg + i) = 0;
     munmap((void*)gpio_reg, sysconf(_SC_PAGESIZE));
 }
 

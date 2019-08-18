@@ -5,8 +5,8 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "gpio/gpio.h"
-#include "motor/motor.h"
+#include "gpio_dma/gpio.h"
+#include "motor_dma/motor.h"
 
 #define FWRD_KEY 'w'
 #define RVRS_KEY 's'

@@ -23,9 +23,9 @@ EXEC = $(DOCKER) exec -w "$(SRC_DIR)" $(CONTAINER) bash -c 'export CC=$(CC); \
 															export OUT_DIR=$(OUT_DIR); \
 															$(1)'
 
-.PHONY: all gpio motor sonar robit robit_smart camera websrv camera.test websrv.test sonar_test test clean start stop
+.PHONY: all gpio gpio_dma motor motor_dma sonar robit robit_smart camera websrv camera.test websrv.test sonar_test test clean start stop
 
-all: gpio motor sonar robit robit_smart camera websrv
+all: gpio gpio_dma motor motor_dma sonar robit robit_smart camera websrv
 test: camera.test websrv.test sonar_test
 
 camera:      $(OUT_DIR_HOST)/camera
@@ -37,13 +37,19 @@ sonar_test:  $(OUT_DIR_HOST)/sonar_test
 gpio: | $(OUT_DIR_HOST) start
 	$(call EXEC,make -j$$(nproc) -C $@/)
 
+gpio_dma: | $(OUT_DIR_HOST) start
+	$(call EXEC,make -j$$(nproc) -C $@/)
+
 motor: gpio | $(OUT_DIR_HOST) start
+	$(call EXEC,make -j$$(nproc) -C $@/)
+
+motor_dma: gpio_dma | $(OUT_DIR_HOST) start
 	$(call EXEC,make -j$$(nproc) -C $@/)
 
 sonar: gpio | $(OUT_DIR_HOST) start
 	$(call EXEC,make -j$$(nproc) -C $@/)
 
-robit: gpio motor | $(OUT_DIR_HOST) start
+robit: gpio_dma motor_dma | $(OUT_DIR_HOST) start
 	$(call EXEC,make -j$$(nproc) -C $@/)
 
 robit_smart: motor sonar | $(OUT_DIR_HOST) start
@@ -69,7 +75,9 @@ $(OUT_DIR_HOST):
 
 clean:
 	make -C gpio clean
+	make -C gpio_dma clean
 	make -C motor clean
+	make -C motor_dma clean
 	make -C sonar clean
 	make -C robit clean
 	@rm -rf $(OUT_DIR_HOST)

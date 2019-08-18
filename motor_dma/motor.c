@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gpio/gpio.h"
+#include "gpio_dma/gpio.h"
 
 struct motor
 {
@@ -118,4 +118,3 @@ void motor_rotate_counterwise(struct motor_group* mg)
 
     gpio_write(mg->pin_state);
 }
-
